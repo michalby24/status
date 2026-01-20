@@ -128,16 +128,23 @@ runs:
       id: skip_on_release
       shell: bash
       run: |
-        if [[ "${{ github.event.head_commit.message }}" == "chore(main): release"* || "${{ github.event.head_commit.message }}" == "chore(next): release"* || "${{ github.event.head_commit.message }}" == "chore: release"* ]]; then
-          echo "This is a release commit, skipping."
-          echo "skip=true" >> $GITHUB_OUTPUT
-        else
-          echo "This is not a release commit."
-          echo "skip=false" >> $GITHUB_OUTPUT
+        MSG="${{ github.event.head_commit.message }}"
+        BRANCH="${{ github.ref_name }}"
+        SKIP="false"
+
+        # If we are on a pre-release branch (e.g. next) and we see a stable release commit (from main),
+        # we should skip running release-please to avoid creating duplicate/confusing PRs.
+        if [[ "$BRANCH" != "main" && "$BRANCH" != "master" ]]; then
+          if [[ "$MSG" == "chore(main): release"* || "$MSG" == "chore(master): release"* ]]; then
+            echo "Detected stable release commit on $BRANCH. Skipping release-please."
+            SKIP="true"
+          fi
         fi
 
+        echo "skip=$SKIP" >> $GITHUB_OUTPUT
+
     - name: Run release-please
-      if: env.SKIP_RELEASE != 'true'
+      if: env.SKIP_RELEASE != 'true' && steps.skip_on_release.outputs.skip != 'true'
       uses: googleapis/release-please-action@v4
       with:
         token: ${{ inputs.token }}

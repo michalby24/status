@@ -12,9 +12,9 @@ on:
 jobs:
   reset-next-to-main:
     runs-on: ubuntu-latest
-    # Guard: Only run if this is a release commit or a published release
+    # Guard: Only run if this is a non-pre-release or a release commit
     if: >-
-      github.event_name == 'release' || 
+      (github.event_name == 'release' && github.event.release.prerelease == false) || 
       (github.event_name == 'push' && contains(github.event.head_commit.message, 'chore(main): release'))
     
     steps:

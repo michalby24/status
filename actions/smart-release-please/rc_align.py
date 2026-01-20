@@ -145,8 +145,11 @@ def main():
     # --- LOGIC FOR MAIN (Stable Promotion) ---
     if branch in ["main", "master"]:
         try:
-            # Fetch tags and use Python Sort here too for consistency
-            tags_output = run_git_command(["tag", "-l", "v*", "--merged", "HEAD"], fail_on_error=False)
+            # Fetch all tags from remote first to ensure we see tags from merged branches
+            run_git_command(["fetch", "--tags"], fail_on_error=False)
+            
+            # Get ALL tags (not just merged) to see tags from next branch
+            tags_output = run_git_command(["tag", "-l", "v*"], fail_on_error=False)
             
             if not tags_output:
                 stable_version = "0.1.0"

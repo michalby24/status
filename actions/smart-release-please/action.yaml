@@ -25,11 +25,18 @@ runs:
       id: skip_on_release
       shell: bash
       run: |
-        if [[ "${{ github.event.head_commit.message }}" == "chore(main): release"* || "${{ github.event.head_commit.message }}" == "chore(next): release"* || "${{ github.event.head_commit.message }}" == "chore: release"* ]]; then
-          echo "This is a release commit - will skip manifest/rc updates but allow release-please to create release."
+        MSG="${{ github.event.head_commit.message }}"
+        if [[ "$MSG" == "chore(main): release"* || "$MSG" == "chore(next): release"* || "$MSG" == "chore: release"* ]]; then
+          echo "This is a release commit - skipping all steps."
+          echo "skip=true" >> $GITHUB_OUTPUT
+        elif [[ "$MSG" == "chore: reset manifest to stable version"* ]]; then
+          echo "This is a manifest reset commit - skipping."
+          echo "skip=true" >> $GITHUB_OUTPUT
+        elif [[ "$MSG" == "chore: enforce correct rc version"* ]]; then
+          echo "This is an rc enforcement commit - skipping."
           echo "skip=true" >> $GITHUB_OUTPUT
         else
-          echo "This is not a release commit."
+          echo "This is not a bot commit."
           echo "skip=false" >> $GITHUB_OUTPUT
         fi
 
@@ -138,7 +145,7 @@ runs:
         fi
 
     - name: Run release-please
-      if: env.SKIP_RELEASE != 'true'
+      if: steps.skip_on_release.outputs.skip != 'true' && env.SKIP_RELEASE != 'true'
       uses: googleapis/release-please-action@v4
       with:
         token: ${{ inputs.token }}

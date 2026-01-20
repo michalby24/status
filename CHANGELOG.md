@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0-rc.3](https://github.com/michalby24/status/compare/v0.2.0-rc.1...v0.2.0-rc.3) (2026-01-20)
+
+
+### Bug Fixes
+
+* improve last stable release tag retrieval in action.yaml ([e887c47](https://github.com/michalby24/status/commit/e887c4743b076c7af5912a5cb08aec4561b60df6))
+
+
+### Miscellaneous Chores
+
+* enforce correct rc version ([e2eacef](https://github.com/michalby24/status/commit/e2eaceff1b497f08bf25a7c17b67b263f5856c90))
+
 ## [0.2.0-rc.1](https://github.com/michalby24/status/compare/v0.1.0...v0.2.0-rc.1) (2026-01-20)
 
 

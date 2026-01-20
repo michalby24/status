@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.4.0-rc.3](https://github.com/michalby24/status/compare/v0.3.0-rc.1...v0.4.0-rc.3) (2026-01-20)
+
+
+### Features
+
+* add detection for release and bot commits to skip processing ([65cf434](https://github.com/michalby24/status/commit/65cf434c2d1d94a07f830a66898e52c7910b0135))
+* enhance commit detection to skip processing for release and bot commits ([dcc923b](https://github.com/michalby24/status/commit/dcc923b23b3af3ee17c27d88709c6fd3a24fc956))
+* f ([#22](https://github.com/michalby24/status/issues/22)) ([b300127](https://github.com/michalby24/status/commit/b3001276619e3d35da618eddc62f464d96203ae3))
+* next ([#27](https://github.com/michalby24/status/issues/27)) ([65de73a](https://github.com/michalby24/status/commit/65de73aa03aa37b997534e77bca9d38a0f938dbd))
+* nexting ([#37](https://github.com/michalby24/status/issues/37)) ([caa7a09](https://github.com/michalby24/status/commit/caa7a09cf4ea166e07996ca027449b061f874d3c))
+* nNext ([#15](https://github.com/michalby24/status/issues/15)) ([2294030](https://github.com/michalby24/status/commit/2294030ea48cd046a552bfa2f0ddf2323c47f431))
+* test ([b872705](https://github.com/michalby24/status/commit/b872705d940546b1c87c76484b0bbd1b345daf77))
+
+
+### Bug Fixes
+
+* next ([#3](https://github.com/michalby24/status/issues/3)) ([ee6236b](https://github.com/michalby24/status/commit/ee6236bce9d8d62ec7c5d9e3ad6763b9103fdcfc))
+
+
+### Miscellaneous Chores
+
+* enforce correct rc version ([2db49f2](https://github.com/michalby24/status/commit/2db49f2089dd59dbe14eec11d51a0fa35b87af78))
+* enforce correct rc version ([976be6d](https://github.com/michalby24/status/commit/976be6dd7d2ec00eef27877d3a3705ee9b5846ff))
+* enforce correct rc version ([4a2c1eb](https://github.com/michalby24/status/commit/4a2c1eb2259817fb4a2964159c444888357cf191))
+* enforce correct rc version ([55cc80f](https://github.com/michalby24/status/commit/55cc80ff1731122a62566dd621a0e1167c7944d9))
+* enforce correct rc version ([2becd08](https://github.com/michalby24/status/commit/2becd0890c3c57e59d69996ff15e6c9f094217ba))
+* enforce correct rc version ([d869446](https://github.com/michalby24/status/commit/d869446e9709977a3f6d1a0449b2ecab8e27958a))
+* enforce correct rc version ([b50f86f](https://github.com/michalby24/status/commit/b50f86faaf9287cc7631288571342ff92934bc37))
+* enforce correct rc version ([7328d4e](https://github.com/michalby24/status/commit/7328d4e2c7b5752ceecb803ae03a859802367797))
+* enforce correct rc version ([9595cd0](https://github.com/michalby24/status/commit/9595cd039328f4a704a798875f6c8997306aa88a))
+* enforce correct rc version ([84ccd3d](https://github.com/michalby24/status/commit/84ccd3d076770a03017c7c1647a2198f2f0e4460))
+* enforce correct rc version ([5cacc86](https://github.com/michalby24/status/commit/5cacc868478c0d756948734a0de55533fd330fe1))
+* enforce correct rc version ([d3087e2](https://github.com/michalby24/status/commit/d3087e24bdd542a8a9f4acd86bae8485cbdfd574))
+
 ## [0.3.0](https://github.com/michalby24/status/compare/v0.3.0-rc.1...v0.3.0) (2026-01-20)
 
 

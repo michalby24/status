@@ -1,6 +1,6 @@
 {
   "name": "maybe-test-repo",
-  "version": "0.4.0-rc.2",
+  "version": "0.5.0-rc.4",
   "private": true,
   "description": "Minimal package.json to satisfy release-please action for this repository.",
   "repository": {

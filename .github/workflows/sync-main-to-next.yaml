@@ -1,0 +1,43 @@
+name: Sync Main to Next (Hard Reset)
+description: "Forcefully resets 'next' to match 'main' after a release to ensure tags are synced and conflicts are ignored."
+
+on:
+  # Trigger when a Release is published
+  release:
+    types: [published]
+  push:
+    branches:
+      - main
+
+jobs:
+  reset-next-to-main:
+    runs-on: ubuntu-latest
+    # Guard: Only run if this is a release commit or a published release
+    if: >-
+      github.event_name == 'release' || 
+      (github.event_name == 'push' && contains(github.event.head_commit.message, 'chore(main): release'))
+    
+    steps:
+      - name: Checkout Next Branch
+        uses: actions/checkout@v6
+        with:
+          ref: next
+          # We need full history to fetch main correctly
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Hard Reset Next to Main
+        run: |
+          git config user.name "mapcolonies[bot]"
+          git config user.email "devops[bot]@mapcolonies.com"
+
+          echo "Fetching latest main..."
+          git fetch origin main
+
+          echo "Resetting next to match origin/main..."
+          # This destroys 'next' history and makes it point exactly to 'main'
+          git reset --hard origin/main
+
+          echo "Force pushing to next..."
+          # Force push is required because we rewrote history
+          git push origin next --force

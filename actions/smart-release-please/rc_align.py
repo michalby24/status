@@ -2,193 +2,150 @@ import os
 import re
 import subprocess
 import sys
-from typing import Tuple, Optional, List
 
-# Constants
 BOT_COMMIT_MSG = "chore: enforce correct rc version"
 BOT_FOOTER_TAG = "Release-As:"
-# Standard release-please bot patterns
-IGNORE_PATTERNS = [
-    r"^chore\(.*\): release",
-    r"^chore: release",
-    r"^chore: reset manifest to stable version"
-]
 
-class VersionCalculator:
-    def __init__(self):
-        self.branch = os.environ.get("GITHUB_REF_NAME", "unknown")
+def run_git_command(args, fail_on_error=True):
+    try:
+        result = subprocess.run(["git"] + args, stdout=subprocess.PIPE, text=True, check=fail_on_error)
+        return result.stdout.strip()
+    except subprocess.CalledProcessError:
+        return None
 
-    def run_git(self, args: List[str], fail_on_error=True) -> Optional[str]:
-        """Executes a git command and returns stripped output."""
-        try:
-            result = subprocess.run(
-                ["git"] + args, 
-                stdout=subprocess.PIPE, 
-                stderr=subprocess.PIPE,
-                text=True, 
-                check=fail_on_error
-            )
-            return result.stdout.strip()
-        except subprocess.CalledProcessError as e:
-            if fail_on_error:
-                print(f"ERROR: Git command failed: {' '.join(args)}\n{e.stderr}")
-                sys.exit(1)
-            return None
+def find_baseline_tag():
+    # Get all tags sorted by creation date (most recent first)
+    # This searches across ALL branches, not just ancestors of HEAD
+    tags_output = run_git_command(["tag", "-l", "v*", "--sort=-creatordate"], fail_on_error=False)
+    
+    if not tags_output:
+        print("INFO: No tags found. Assuming 0.0.0 baseline.")
+        return None, True
+    
+    # Get the most recent tag
+    tag = tags_output.split('\n')[0]
 
-    def parse_semver(self, tag: str) -> Tuple[int, int, int, int, bool]:
-        """
-        Parses a tag into (major, minor, patch, rc, is_stable).
-        Returns (0,0,0,0,True) if invalid.
-        """
-        if not tag:
-            return 0, 0, 0, 0, True
+    # Check if the found tag is an RC
+    if "-rc" in tag:
+        print(f"INFO: Baseline found (RC): {tag}")
+        return tag, False
+    
+    # Otherwise, it's stable
+    print(f"INFO: Baseline found (Stable): {tag}")
+    return tag, True
 
-        # Regex for v1.0.0 or v1.0.0-rc.1
-        # Group 4 is the RC number (optional)
-        match = re.match(r"^v(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?$", tag)
+def get_commit_depth(baseline_tag):
+    rev_range = f"{baseline_tag}..HEAD" if baseline_tag else "HEAD"
+    
+    # Get all subjects since baseline
+    raw_subjects = run_git_command(["log", rev_range, "--first-parent", "--pretty=format:%s"], fail_on_error=False)
+    if not raw_subjects:
+        return 0
+
+    real_commits = []
+    for s in raw_subjects.split('\n'):
+        # 1. Skip your alignment bot commits
+        if BOT_FOOTER_TAG in s or BOT_COMMIT_MSG in s:
+            continue
         
-        if match:
-            major = int(match.group(1))
-            minor = int(match.group(2))
-            patch = int(match.group(3))
-            rc_part = match.group(4)
+        # 2. Skip Release Please commits (CRITICAL FIX)
+        # Matches "chore(next): release v1.0.0-rc.1" or "chore: release v1.0.0-rc.1"
+        if re.match(r"^chore(\(.*\))?: release", s):
+            continue
             
-            if rc_part:
-                return major, minor, patch, int(rc_part), False
-            else:
-                return major, minor, patch, 0, True
-        
-        return 0, 0, 0, 0, True
+        real_commits.append(s)
 
-    def get_latest_tag(self) -> Tuple[Optional[str], bool]:
-        """
-        Finds the most relevant tag reachable from HEAD.
-        Returns (tag_string, is_stable_boolean).
-        """
-        raw_tags = self.run_git(["tag", "-l", "v*", "--merged", "HEAD"], fail_on_error=False)
-        
-        if not raw_tags:
-            print("INFO: No tags found. Assuming fresh baseline (0.0.0).")
-            return None, True
+    return len(real_commits)
 
-        all_tags = raw_tags.split('\n')
+def parse_semver(tag):
+    if not tag:
+        return 0, 0, 0, 0
 
-        # Sort Logic: Major > Minor > Patch > Stable > RC
-        def sort_key(t):
-            maj, min, pat, rc, is_stable = self.parse_semver(t)
-            # We want Stable (1) to come AFTER RC (0) in ascending sort, 
-            # so usually Stable > RC. But here we sort Reverse, so Stable comes first.
-            return (maj, min, pat, 1 if is_stable else 0, rc)
+    m_rc = re.match(r"^v(\d+)\.(\d+)\.(\d+)-rc\.(\d+)$", tag)
+    if m_rc:
+        return int(m_rc[1]), int(m_rc[2]), int(m_rc[3]), int(m_rc[4])
 
-        sorted_tags = sorted(all_tags, key=sort_key, reverse=True)
-        best_tag = sorted_tags[0]
-        
-        _, _, _, _, is_stable = self.parse_semver(best_tag)
-        
-        print(f"INFO: Baseline tag found: {best_tag} (Stable: {is_stable})")
-        return best_tag, is_stable
+    m_stable = re.match(r"^v(\d+)\.(\d+)\.(\d+)$", tag)
+    if m_stable:
+        return int(m_stable[1]), int(m_stable[2]), int(m_stable[3]), 0
+    
+    return 0, 0, 0, 0
 
-    def get_commit_depth_and_impact(self, baseline_tag: str) -> Tuple[int, bool, bool]:
-        """
-        Calculates commit depth (excluding bots) and analyzes impact (feat/breaking).
-        Returns (depth, is_breaking, is_feat).
-        """
-        rev_range = f"{baseline_tag}..HEAD" if baseline_tag else "HEAD"
-        print(f"INFO: Analyzing range: {rev_range}")
+def analyze_impact(baseline_tag):
+    rev_range = f"{baseline_tag}..HEAD" if baseline_tag else "HEAD"
+    logs = run_git_command(["log", rev_range, "--pretty=format:%B"], fail_on_error=False)
+    
+    if not logs:
+        return False, False
 
-        # Get full subjects for filtering
-        logs = self.run_git(["log", rev_range, "--first-parent", "--pretty=format:%s|||%B"])
-        if not logs:
-            return 0, False, False
+    breaking_regex = r"^(feat|fix|refactor)(\(.*\))?!:"
+    is_breaking = re.search(breaking_regex, logs, re.MULTILINE) or "BREAKING CHANGE" in logs
+    is_feat = re.search(r"^feat(\(.*\))?:", logs, re.MULTILINE)
 
-        entries = logs.split('\n')
-        
-        valid_commits = []
-        is_breaking = False
-        is_feat = False
+    return bool(is_breaking), bool(is_feat)
 
-        for entry in entries:
-            parts = entry.split("|||")
-            subject = parts[0]
-            body = parts[1] if len(parts) > 1 else ""
-            full_msg = f"{subject}\n{body}"
-
-            # 1. Filtering Logic
-            if BOT_FOOTER_TAG in full_msg or BOT_COMMIT_MSG in subject:
-                continue
-            
-            is_bot = False
-            for pattern in IGNORE_PATTERNS:
-                if re.match(pattern, subject):
-                    is_bot = True
-                    break
-            if is_bot:
-                continue
-
-            # 2. Impact Analysis
-            valid_commits.append(subject)
-            
-            # Check Breaking
-            if "BREAKING CHANGE" in full_msg or re.search(r"^(feat|fix|refactor)(\(.*\))?!:", subject):
-                is_breaking = True
-            
-            # Check Feat
-            if re.search(r"^feat(\(.*\))?:", subject):
-                is_feat = True
-
-        print(f"INFO: Found {len(valid_commits)} user commits since baseline.")
-        return len(valid_commits), is_breaking, is_feat
-
-    def calculate_next(self, current_tag: str, is_stable_baseline: bool) -> str:
-        maj, min, pat, rc, _ = self.parse_semver(current_tag)
-        depth, is_breaking, is_feat = self.get_commit_depth_and_impact(current_tag)
-
-        if depth == 0:
-            print("INFO: No changes detected. Exiting.")
-            sys.exit(0)
-
-        # Logic Mapping to Flowchart
-        # 1. Breaking Change -> Major Bump
-        if is_breaking:
-            return f"{maj + 1}.0.0-rc.{depth}"
-
-        # 2. Feature -> Minor Bump (if stable) OR Stay on RC
-        if is_feat:
-            if is_stable_baseline:
-                # v1.0.0 -> v1.1.0-rc.X
-                return f"{maj}.{min + 1}.0-rc.{depth}"
-            else:
-                # v1.1.0-rc.1 -> v1.1.0-rc.X (Keep same minor, increment RC)
-                return f"{maj}.{min}.{pat}-rc.{rc + depth}"
-
-        # 3. Fix/Other -> Patch Bump (if stable) OR Stay on RC
-        if is_stable_baseline:
-            # v1.0.0 -> v1.0.1-rc.X
-            return f"{maj}.{min}.{pat + 1}-rc.{depth}"
+def calculate_next_version(major, minor, patch, rc, depth, is_breaking, is_feat, from_stable):
+    if is_breaking:
+        return f"{major + 1}.0.0-rc.{depth}"
+    
+    if is_feat:
+        if from_stable or patch > 0:
+            return f"{major}.{minor + 1}.0-rc.{depth}"
         else:
-            # v1.0.1-rc.1 -> v1.0.1-rc.X
-            return f"{maj}.{min}.{pat}-rc.{rc + depth}"
+            return f"{major}.{minor}.{patch}-rc.{rc + depth}"
 
-    def run(self):
-        print(f"INFO: Processing Branch: {self.branch}")
+    if from_stable:
+        return f"{major}.{minor}.{patch + 1}-rc.{depth}"
+    else:
+        return f"{major}.{minor}.{patch}-rc.{rc + depth}"
 
-        # --- BRANCH: MAIN (Stable Promotion) ---
-        if self.branch in ["main", "master"]:
-            tag, _ = self.get_latest_tag()
-            if tag:
-                clean_ver = re.sub(r'-rc.*', '', tag).lstrip('v')
-                print(f"OUTPUT: next_version={clean_ver}")
-                with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-                    f.write(f"next_version={clean_ver}\n")
+def main():
+    branch = os.environ.get("GITHUB_REF_NAME")
+
+    # --- LOGIC FOR MAIN (Stable Promotion) ---
+    if branch in ["main", "master"]:
+        try:
+            tag, _ = find_baseline_tag()
+            
+            if not tag:
+                stable_version = "0.1.0"
+            else:
+                clean_tag = re.sub(r'-rc.*', '', tag)
+                stable_version = clean_tag.lstrip('v')
+
+            print(f"INFO: Detected tag {tag}, promoting to {stable_version}")
+
+            with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+                f.write(f"next_version={stable_version}\n")
             return
 
-        # --- BRANCH: NEXT (RC Calculation) ---
-        tag, is_stable = self.get_latest_tag()
-        next_ver = self.calculate_next(tag, is_stable)
+        except Exception as e:
+            print(f"CRITICAL ERROR (stable): {e}")
+            sys.exit(0)
+
+    # --- LOGIC FOR NEXT (RC Calculation) ---
+    try:
+        tag, from_stable = find_baseline_tag()
         
-        print(f"OUTPUT: next_version={next_ver}")
+        depth = get_commit_depth(tag)
+        if depth == 0:
+            print("INFO: No user commits found since baseline. Exiting.")
+            return
+
+        major, minor, patch, rc = parse_semver(tag)
+        is_breaking, is_feat = analyze_impact(tag)
+
+        next_ver = calculate_next_version(
+            major, minor, patch, rc, 
+            depth, is_breaking, is_feat, from_stable
+        )
+
         with open(os.environ["GITHUB_OUTPUT"], "a") as f:
             f.write(f"next_version={next_ver}\n")
 
+    except Exception as e:
+        print(f"CRITICAL ERROR: {e}")
+        sys.exit(0)
+
 if __name__ == "__main__":
-    VersionCalculator().run()
+    main()

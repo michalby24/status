@@ -24,7 +24,7 @@ jobs:
           ref: next
           # We need full history to fetch main correctly
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GH_PAT }}
 
       - name: Hard Reset Next to Main
         run: |

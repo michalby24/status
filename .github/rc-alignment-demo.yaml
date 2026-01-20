@@ -1,0 +1,28 @@
+name: RC Alignment Demo
+
+on:
+  push:
+    branches:
+      - next
+      - main
+
+concurrency:
+  group: smart-release-please-${{ github.ref }}
+  cancel-in-progress: false  # false to queue, not cancel
+
+permissions:
+  contents: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Run Smart Release Please
+        uses: ./actions/smart-release-please
+        with:
+          token: ${{ secrets.GH_PAT }}

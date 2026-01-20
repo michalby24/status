@@ -1,0 +1,14 @@
+{
+  "name": "maybe-test-repo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Minimal package.json to satisfy release-please action for this repository.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/michalby24/maybe-test-repo.git"
+  },
+  "license": "MIT",
+  "scripts": {
+    "test": "echo \"No tests defined\" && exit 0"
+  }
+}

@@ -1,0 +1,145 @@
+name: "Smart Release Please"
+description: "Handles RC calculation on next and Stable promotion on main."
+
+inputs:
+  token:
+    description: "GitHub Token (PAT)"
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v6 
+      with:
+        fetch-depth: 0
+        token: ${{ inputs.token }}
+
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.14'
+
+    - name: Calculate Correct RC Version
+      id: calc_rc
+      shell: bash
+      run: python3 "${{ github.action_path }}/rc_align.py"
+
+    - name: Fix Manifest for Main Branch
+      if: github.ref_name == 'main' || github.ref_name == 'master'
+      shell: bash
+      run: |
+        # Configure Git
+        git config user.name "mapcolonies[bot]"
+        git config user.email "devops[bot]@mapcolonies.com"
+        
+        # On main, find the last stable release and update manifest
+        LAST_STABLE=$(git tag -l "v[0-9]*.[0-9]*.[0-9]" --sort=-creatordate | head -n1 | sed 's/^v//')
+        
+        if [ -n "$LAST_STABLE" ]; then
+          echo "Setting manifest to last stable release: $LAST_STABLE"
+          echo "{\".\": \"$LAST_STABLE\"}" > .release-please-manifest.json
+        else
+          echo "No stable release found, using calculated version"
+          TARGET_VER="${{ steps.calc_rc.outputs.next_version }}"
+          echo "{\".\": \"$TARGET_VER\"}" > .release-please-manifest.json
+        fi
+        
+        git add .release-please-manifest.json
+        
+        # Only commit if there are changes
+        if ! git diff --staged --quiet; then
+          git commit -m "chore: reset manifest to stable version"
+          git push "https://x-access-token:${{ inputs.token }}@github.com/${{ github.repository }}.git" ${{ github.ref_name }}
+        else
+          echo "No changes to manifest, skipping commit"
+        fi
+
+    - name: Inject Release-As Footer
+      if: >-
+        ${{ 
+          steps.calc_rc.outputs.next_version != '' &&
+          !contains(github.event.head_commit.message, 'Release-As:') &&
+          ! (startsWith(github.event.head_commit.message, 'chore(') && contains(github.event.head_commit.message, '): release')) &&
+          ! (contains(github.event.head_commit.message, 'Merge branch') && contains(github.event.head_commit.message, 'main'))
+        }}
+      shell: bash
+      run: |
+        # Configure Git
+        git config user.name "mapcolonies[bot]"
+        git config user.email "devops[bot]@mapcolonies.com"
+
+        # Check if footer exists (Loop Protection)
+        TARGET_VER="${{ steps.calc_rc.outputs.next_version }}"
+        LAST_MSG=$(git log -1 --pretty=%B)
+        
+        if [[ "$LAST_MSG" == *"Release-As: $TARGET_VER"* ]]; then
+          echo "Footer already present. Skipping push."
+          exit 0
+        fi
+
+        # Commit & Push
+        git commit --allow-empty -m "chore: enforce correct rc version" -m "Release-As: $TARGET_VER"
+        git push "https://x-access-token:${{ inputs.token }}@github.com/${{ github.repository }}.git" ${{ github.ref_name }}
+
+        echo "SKIP_RELEASE=true" >> $GITHUB_ENV
+
+    - name: Close Stale Release PRs
+      # Only run if we are NOT skipping (meaning we are ready to run release-please)
+      if: env.SKIP_RELEASE != 'true' && ${{ !contains(github.ref, 'release-please--branches') }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+      run: |
+        echo "Checking for existing release PRs on branch ${{ github.ref_name }}..."
+        
+        PR_DATA=$(gh pr list \
+          --base "${{ github.ref_name }}" \
+          --label "autorelease: pending" \
+          --json number,state \
+          --jq '.[0]')
+
+        if [ -n "$PR_DATA" ] && [ "$PR_DATA" != "null" ]; then
+          PR_NUMBER=$(echo "$PR_DATA" | jq -r '.number')
+          PR_STATE=$(echo "$PR_DATA" | jq -r '.state')
+          
+          if [ "$PR_STATE" == "OPEN" ]; then
+            echo "Found open stale release PR #$PR_NUMBER. Closing it to force a fresh regeneration..."
+            gh pr close "$PR_NUMBER" --delete-branch
+          else
+            echo "Found release PR #$PR_NUMBER but it's already $PR_STATE. Skipping."
+          fi
+        else
+          echo "No open release PRs found."
+        fi
+
+    - name: set release type
+      id: set_release_type
+      shell: bash
+      run: |
+        if [ "${{ github.ref_name }}" == "main" ]; then
+          echo "RELEASE_TYPE=stable" >> $GITHUB_ENV
+        else
+          echo "RELEASE_TYPE=rc" >> $GITHUB_ENV
+        fi
+
+    - name: Skip on release commit
+      id: skip_on_release
+      shell: bash
+      run: |
+        if [[ "${{ github.event.head_commit.message }}" == "chore(main): release"* || "${{ github.event.head_commit.message }}" == "chore(next): release"* || "${{ github.event.head_commit.message }}" == "chore: release"* ]]; then
+          echo "This is a release commit, skipping."
+          echo "skip=true" >> $GITHUB_OUTPUT
+        else
+          echo "This is not a release commit."
+          echo "skip=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Run release-please
+      if: env.SKIP_RELEASE != 'true'
+      uses: googleapis/release-please-action@v4
+      with:
+        token: ${{ inputs.token }}
+        target-branch: ${{ github.ref_name }}
+        config-file: release-please-config.${{ github.ref_name }}.json

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/michalby24/status/compare/v0.6.0...v0.6.0) (2026-01-20)
+
+
+### Miscellaneous Chores
+
+* enforce correct rc version ([786c59b](https://github.com/michalby24/status/commit/786c59b707546bce3a0db1b419a16eeb44cfe497))
+
 ## [0.6.0](https://github.com/michalby24/status/compare/v0.6.0-rc.1...v0.6.0) (2026-01-20)
 
 

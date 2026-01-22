@@ -17,12 +17,8 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
-    # Skip if this is a bot commit or release commit
-    if: >-
-      !contains(github.event.head_commit.message, '[skip ci]') &&
-      !contains(github.event.head_commit.message, 'chore: reset manifest to stable version') &&
-      !contains(github.event.head_commit.message, 'chore: enforce correct rc version') &&
-      github.event.head_commit.author.name != 'mapcolonies[bot]'
+    # Only skip if commit message explicitly says [skip ci]
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
     
     steps:
       - name: Checkout

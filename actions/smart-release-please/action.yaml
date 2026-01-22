@@ -129,16 +129,6 @@ runs:
           echo "No open release PRs found."
         fi
 
-    - name: set release type
-      id: set_release_type
-      shell: bash
-      run: |
-        if [ "${{ github.ref_name }}" == "main" ]; then
-          echo "RELEASE_TYPE=stable" >> $GITHUB_ENV
-        else
-          echo "RELEASE_TYPE=rc" >> $GITHUB_ENV
-        fi
-
     - name: Run release-please
       if: env.SKIP_RELEASE != 'true'
       uses: googleapis/release-please-action@v4

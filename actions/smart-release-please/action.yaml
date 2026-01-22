@@ -16,38 +16,30 @@ runs:
         fetch-depth: 0
         token: ${{ inputs.token }}
 
-    - name: Skip on bot commits
+    - name: Check if should skip
       id: skip_check
       shell: bash
       run: |
         COMMIT_MSG="${{ github.event.head_commit.message }}"
-        COMMIT_AUTHOR="${{ github.event.head_commit.author.name }}"
         
-        # Skip if this is a release commit
+        # Always skip release merge commits
         if [[ "$COMMIT_MSG" == "chore(main): release"* ]] || \
            [[ "$COMMIT_MSG" == "chore(next): release"* ]] || \
            [[ "$COMMIT_MSG" == "chore: release"* ]]; then
-          echo "This is a release commit, skipping."
+          echo "Release merge commit detected - skipping"
           echo "skip=true" >> $GITHUB_OUTPUT
           exit 0
         fi
         
-        # Skip if this is a bot commit (manifest reset or version enforcement)
-        if [[ "$COMMIT_MSG" == "chore: reset manifest to stable version"* ]] || \
-           [[ "$COMMIT_MSG" == "chore: enforce correct rc version"* ]]; then
-          echo "This is a bot maintenance commit, skipping."
+        # Skip bot maintenance commits ONLY if they already have [skip ci]
+        # This prevents the second trigger but allows the first one
+        if [[ "$COMMIT_MSG" == *"[skip ci]"* ]]; then
+          echo "Skip CI tag detected - skipping"
           echo "skip=true" >> $GITHUB_OUTPUT
           exit 0
         fi
         
-        # Skip if commit author is the bot
-        if [[ "$COMMIT_AUTHOR" == "mapcolonies[bot]" ]]; then
-          echo "Commit author is bot, skipping."
-          echo "skip=true" >> $GITHUB_OUTPUT
-          exit 0
-        fi
-        
-        echo "This is a user commit, proceeding."
+        echo "Proceeding with workflow"
         echo "skip=false" >> $GITHUB_OUTPUT
 
     - name: Set up Python
@@ -66,30 +58,32 @@ runs:
       if: steps.skip_check.outputs.skip != 'true' && (github.ref_name == 'main' || github.ref_name == 'master')
       shell: bash
       run: |
-        # Configure Git
         git config user.name "mapcolonies[bot]"
         git config user.email "devops[bot]@mapcolonies.com"
         
         # On main, find the last stable release and update manifest
         LAST_STABLE=$(git tag -l "v[0-9]*.[0-9]*.[0-9]" --sort=-creatordate | head -n1 | sed 's/^v//')
         
+        CURRENT_MANIFEST=$(cat .release-please-manifest.json 2>/dev/null || echo '{}')
+        
         if [ -n "$LAST_STABLE" ]; then
           echo "Setting manifest to last stable release: $LAST_STABLE"
-          echo "{\".\": \"$LAST_STABLE\"}" > .release-please-manifest.json
+          NEW_MANIFEST="{\".\": \"$LAST_STABLE\"}"
         else
           echo "No stable release found, using calculated version"
           TARGET_VER="${{ steps.calc_rc.outputs.next_version }}"
-          echo "{\".\": \"$TARGET_VER\"}" > .release-please-manifest.json
+          NEW_MANIFEST="{\".\": \"$TARGET_VER\"}"
         fi
         
-        git add .release-please-manifest.json
-        
-        # Only commit if there are changes
-        if ! git diff --staged --quiet; then
+        # Check if manifest actually needs updating
+        if [[ "$CURRENT_MANIFEST" != "$NEW_MANIFEST" ]]; then
+          echo "$NEW_MANIFEST" > .release-please-manifest.json
+          git add .release-please-manifest.json
           git commit -m "chore: reset manifest to stable version [skip ci]"
           git push "https://x-access-token:${{ inputs.token }}@github.com/${{ github.repository }}.git" ${{ github.ref_name }}
+          echo "Manifest updated and pushed"
         else
-          echo "No changes to manifest, skipping commit"
+          echo "Manifest already correct, no changes needed"
         fi
 
     - name: Inject Release-As Footer
@@ -101,22 +95,22 @@ runs:
         }}
       shell: bash
       run: |
-        # Configure Git
         git config user.name "mapcolonies[bot]"
         git config user.email "devops[bot]@mapcolonies.com"
 
-        # Check if footer exists (Loop Protection)
         TARGET_VER="${{ steps.calc_rc.outputs.next_version }}"
         LAST_MSG=$(git log -1 --pretty=%B)
         
+        # Double-check footer doesn't exist
         if [[ "$LAST_MSG" == *"Release-As: $TARGET_VER"* ]]; then
-          echo "Footer already present. Skipping push."
+          echo "Footer already present. Skipping."
           exit 0
         fi
 
-        # Commit & Push with [skip ci] to prevent triggering another workflow
+        # Commit with [skip ci] to prevent re-triggering
         git commit --allow-empty -m "chore: enforce correct rc version [skip ci]" -m "Release-As: $TARGET_VER"
         git push "https://x-access-token:${{ inputs.token }}@github.com/${{ github.repository }}.git" ${{ github.ref_name }}
+        echo "Version footer injected"
 
     - name: Close Stale Release PRs
       if: steps.skip_check.outputs.skip != 'true' && !contains(github.ref, 'release-please--branches')
@@ -124,7 +118,7 @@ runs:
       env:
         GH_TOKEN: ${{ inputs.token }}
       run: |
-        echo "Checking for existing release PRs on branch ${{ github.ref_name }}..."
+        echo "Checking for stale release PRs on ${{ github.ref_name }}..."
         
         PR_DATA=$(gh pr list \
           --base "${{ github.ref_name }}" \
@@ -137,13 +131,11 @@ runs:
           PR_STATE=$(echo "$PR_DATA" | jq -r '.state')
           
           if [ "$PR_STATE" == "OPEN" ]; then
-            echo "Found open stale release PR #$PR_NUMBER. Closing it to force a fresh regeneration..."
+            echo "Closing stale PR #$PR_NUMBER..."
             gh pr close "$PR_NUMBER" --delete-branch
-          else
-            echo "Found release PR #$PR_NUMBER but it's already $PR_STATE. Skipping."
           fi
         else
-          echo "No open release PRs found."
+          echo "No stale PRs found"
         fi
 
     - name: Run release-please

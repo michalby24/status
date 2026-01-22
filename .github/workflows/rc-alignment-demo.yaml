@@ -8,18 +8,14 @@ on:
 
 concurrency:
   group: smart-release-please-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: false  # false to queue, not cancel
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   release-please:
     runs-on: ubuntu-latest
-    # Only skip if commit message explicitly says [skip ci]
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
-    
     steps:
       - name: Checkout
         uses: actions/checkout@v6

@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.10.0-rc.2](https://github.com/michalby24/status/compare/v0.9.3-rc.8...v0.10.0-rc.2) (2026-01-22)
+
+
+### Features
+
+* revert ([4d25355](https://github.com/michalby24/status/commit/4d25355aa424977d27c862e870b4e7eae5820af3))
+
+
+### Miscellaneous Chores
+
+* enforce correct rc version ([3556b22](https://github.com/michalby24/status/commit/3556b22a90732572677a140d1a52536c4613a1df))
+* enforce correct rc version [skip ci] ([ccab4f8](https://github.com/michalby24/status/commit/ccab4f8b4e9911c6976c602e6699ed07c37dc4a7))
+
 ## [0.9.3-rc.8](https://github.com/michalby24/status/compare/v0.9.3-rc.6...v0.9.3-rc.8) (2026-01-22)
 
 

@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.10.0-rc.7](https://github.com/michalby24/status/compare/v0.10.0-rc.5...v0.10.0-rc.7) (2026-01-22)
+
+
+### Features
+
+* reorganize release logic and add release type setting ([3a435bf](https://github.com/michalby24/status/commit/3a435bf4b8399817b3cc0ff62fc70a98ce6974e7))
+
+
+### Miscellaneous Chores
+
+* enforce correct rc version ([0aa3a50](https://github.com/michalby24/status/commit/0aa3a50171e51d95af4d7bcc3383b343a61aa59d))
+
 ## [0.10.0-rc.5](https://github.com/michalby24/status/compare/v0.10.0-rc.3...v0.10.0-rc.5) (2026-01-22)
 
 

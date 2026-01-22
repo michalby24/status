@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.9.3-rc.8](https://github.com/michalby24/status/compare/v0.9.3-rc.6...v0.9.3-rc.8) (2026-01-22)
+
+
+### Bug Fixes
+
+* simplify skip logic for CI in release workflow ([bca073c](https://github.com/michalby24/status/commit/bca073c1e51890ea53b46b950a573331ff021cd6))
+
+
+### Miscellaneous Chores
+
+* enforce correct rc version [skip ci] ([3415ee0](https://github.com/michalby24/status/commit/3415ee01a723424aa7b19b67d139a908b24eee76))
+* enforce correct rc version [skip ci] ([8afdcc9](https://github.com/michalby24/status/commit/8afdcc934cd133d3b11b09676ccc8743d0ddf084))
+
 ## [0.9.3-rc.6](https://github.com/michalby24/status/compare/v0.9.2-rc.1...v0.9.3-rc.6) (2026-01-22)
 
 

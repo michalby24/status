@@ -16,57 +16,40 @@ runs:
         fetch-depth: 0
         token: ${{ inputs.token }}
 
-    # --- 1. ROBUST SKIP LOGIC ---
-    # We identify if we should run AT ALL.
-    # We skip if:
-    # 1. It is a release commit (contains "chore(main): release" etc)
-    # 2. It is our own bot commit (contains "chore: reset manifest" etc)
-    # 3. It is a merge into main (optional, prevents double runs)
-    - name: Check Execution Conditions
-      id: check_skip
+    - name: Skip on release commit
+      id: skip_on_release
       shell: bash
       run: |
-        MSG="${{ github.event.head_commit.message }}"
-        echo "Analyzing commit message: $MSG"
-        
-        # Check for Release Please commits
-        if [[ "$MSG" == *"chore(main): release"* || "$MSG" == *"chore(next): release"* || "$MSG" == *"chore: release"* ]]; then
-           echo "STOP_WORKFLOW=true" >> $GITHUB_OUTPUT
-           echo "Reason: Release commit detected. Stopping."
-           exit 0
+        if [[ "${{ github.event.head_commit.message }}" == "chore(main): release"* || "${{ github.event.head_commit.message }}" == "chore(next): release"* || "${{ github.event.head_commit.message }}" == "chore: release"* ]]; then
+          echo "This is a release commit, skipping."
+          echo "skip=true" >> $GITHUB_OUTPUT
+        else
+          echo "This is not a release commit."
+          echo "skip=false" >> $GITHUB_OUTPUT
         fi
-
-        # Check for Our Own Bot Commits (Loop Protection)
-        if [[ "$MSG" == *"chore: reset manifest"* || "$MSG" == *"chore: enforce correct rc"* ]]; then
-           echo "STOP_WORKFLOW=true" >> $GITHUB_OUTPUT
-           echo "Reason: Internal bot commit detected. Stopping."
-           exit 0
-        fi
-
-        echo "STOP_WORKFLOW=false" >> $GITHUB_OUTPUT
 
     - name: Set up Python
-      if: steps.check_skip.outputs.STOP_WORKFLOW != 'true'
+      if: env.SKIP_RELEASE != 'true'
       uses: actions/setup-python@v6
       with:
         python-version: '3.14'
 
     - name: Calculate Correct RC Version
-      if: steps.check_skip.outputs.STOP_WORKFLOW != 'true'
+      if: env.SKIP_RELEASE != 'true'
       id: calc_rc
       shell: bash
       run: python3 "${{ github.action_path }}/rc_align.py"
 
     - name: Fix Manifest for Main Branch
-      # Only run on Main, and only if NOT skipping
-      if: steps.check_skip.outputs.STOP_WORKFLOW != 'true' && (github.ref_name == 'main' || github.ref_name == 'master')
+      if: (github.ref_name == 'main' || github.ref_name == 'master') && env.SKIP_RELEASE != 'true'
       shell: bash
       run: |
+        # Configure Git
         git config user.name "mapcolonies[bot]"
         git config user.email "devops[bot]@mapcolonies.com"
         
-        # Robustly find the last STABLE tag (v1.2.3), ignoring RCs
-        LAST_STABLE=$(git tag -l "v*" --sort=-creatordate | grep -E "^v[0-9]+\.[0-9]+\.[0-9]+$" | head -n1 | sed 's/^v//')
+        # On main, find the last stable release and update manifest
+        LAST_STABLE=$(git tag -l "v[0-9]*.[0-9]*.[0-9]" --sort=-creatordate | head -n1 | sed 's/^v//')
         
         if [ -n "$LAST_STABLE" ]; then
           echo "Setting manifest to last stable release: $LAST_STABLE"
@@ -79,60 +62,75 @@ runs:
         
         git add .release-please-manifest.json
         
-        # Only commit if there are ACTUAL changes
+        # Only commit if there are changes
         if ! git diff --staged --quiet; then
           git commit -m "chore: reset manifest to stable version"
           git push "https://x-access-token:${{ inputs.token }}@github.com/${{ github.repository }}.git" ${{ github.ref_name }}
         else
-          echo "Manifest is already up to date. Skipping commit."
+          echo "No changes to manifest, skipping commit"
         fi
 
     - name: Inject Release-As Footer
       if: >-
-        steps.check_skip.outputs.STOP_WORKFLOW != 'true' &&
-        steps.calc_rc.outputs.next_version != '' &&
-        !contains(github.event.head_commit.message, 'Release-As:') &&
-        !contains(github.event.head_commit.message, 'Merge branch')
+        ${{ 
+          steps.calc_rc.outputs.next_version != '' &&
+          !contains(github.event.head_commit.message, 'Release-As:') &&
+          ! (startsWith(github.event.head_commit.message, 'chore(') && contains(github.event.head_commit.message, '): release')) &&
+          ! (contains(github.event.head_commit.message, 'Merge branch') && contains(github.event.head_commit.message, 'main')) &&
+          env.SKIP_RELEASE != 'true'
+        }}
       shell: bash
       run: |
+        # Configure Git
         git config user.name "mapcolonies[bot]"
         git config user.email "devops[bot]@mapcolonies.com"
 
+        # Check if footer exists (Loop Protection)
         TARGET_VER="${{ steps.calc_rc.outputs.next_version }}"
-        
-        # 1. Loop Protection: If tag exists, DO NOT inject footer
-        if git rev-parse "v$TARGET_VER" >/dev/null 2>&1; then
-          echo "Tag v$TARGET_VER already exists. Skipping footer injection."
-          exit 0
-        fi
-
-        # 2. Check msg history
         LAST_MSG=$(git log -1 --pretty=%B)
+        
         if [[ "$LAST_MSG" == *"Release-As: $TARGET_VER"* ]]; then
           echo "Footer already present. Skipping push."
           exit 0
         fi
 
+        # Commit & Push
         git commit --allow-empty -m "chore: enforce correct rc version" -m "Release-As: $TARGET_VER"
         git push "https://x-access-token:${{ inputs.token }}@github.com/${{ github.repository }}.git" ${{ github.ref_name }}
 
-        # Set flag to skip the IMMEDIATE release-please run (wait for the new push trigger)
-        echo "SKIP_RP=true" >> $GITHUB_ENV
+        echo "SKIP_RELEASE=true" >> $GITHUB_ENV
 
     - name: Close Stale Release PRs
-      if: steps.check_skip.outputs.STOP_WORKFLOW != 'true' && env.SKIP_RP != 'true' && !contains(github.ref, 'release-please--branches')
+      # Only run if we are NOT skipping (meaning we are ready to run release-please)
+      if: env.SKIP_RELEASE != 'true' && ${{ !contains(github.ref, 'release-please--branches') }}
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.token }}
       run: |
-        PR_NUMBER=$(gh pr list --base "${{ github.ref_name }}" --label "autorelease: pending" --json number --jq '.[0].number')
-        if [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "null" ]; then
-          echo "Closing stale release PR #$PR_NUMBER..."
-          gh pr close "$PR_NUMBER" --delete-branch
+        echo "Checking for existing release PRs on branch ${{ github.ref_name }}..."
+        
+        PR_DATA=$(gh pr list \
+          --base "${{ github.ref_name }}" \
+          --label "autorelease: pending" \
+          --json number,state \
+          --jq '.[0]')
+
+        if [ -n "$PR_DATA" ] && [ "$PR_DATA" != "null" ]; then
+          PR_NUMBER=$(echo "$PR_DATA" | jq -r '.number')
+          PR_STATE=$(echo "$PR_DATA" | jq -r '.state')
+          
+          if [ "$PR_STATE" == "OPEN" ]; then
+            echo "Found open stale release PR #$PR_NUMBER. Closing it to force a fresh regeneration..."
+            gh pr close "$PR_NUMBER" --delete-branch
+          else
+            echo "Found release PR #$PR_NUMBER but it's already $PR_STATE. Skipping."
+          fi
+        else
+          echo "No open release PRs found."
         fi
 
     - name: Run release-please
-      if: steps.check_skip.outputs.STOP_WORKFLOW != 'true' && env.SKIP_RP != 'true'
+      if: env.SKIP_RELEASE != 'true'
       uses: googleapis/release-please-action@v4
       with:
         token: ${{ inputs.token }}

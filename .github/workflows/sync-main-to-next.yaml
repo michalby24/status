@@ -29,5 +29,7 @@ jobs:
           git config user.email "devops[bot]@mapcolonies.com"
           git fetch origin main
           git reset --hard origin/main
-          git commit --allow-empty -m "chore: sync next to main [skip ci]"
-          git push origin next --force
+          echo "Force pushing to next..."
+          # Force push is required because we rewrote history
+          # Using GITHUB_TOKEN prevents triggering subsequent workflows
+          git push "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" HEAD:next --force

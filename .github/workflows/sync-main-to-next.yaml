@@ -27,11 +27,7 @@ jobs:
         run: |
           git config user.name "mapcolonies[bot]"
           git config user.email "devops[bot]@mapcolonies.com"
-          echo "Fetching latest main..."
           git fetch origin main
-          echo "Resetting next to match origin/main..."
-          # This destroys 'next' history and makes it point exactly to 'main'
           git reset --hard origin/main
-          echo "Force pushing to next..."
-          # Force push is required because we rewrote history
+          git commit --allow-empty -m "chore: sync next to main [skip ci]"
           git push origin next --force

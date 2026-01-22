@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.3-rc.7](https://github.com/michalby24/status/compare/v0.9.3-rc.6...v0.9.3-rc.7) (2026-01-22)
+
+
+### Miscellaneous Chores
+
+* enforce correct rc version [skip ci] ([8afdcc9](https://github.com/michalby24/status/commit/8afdcc934cd133d3b11b09676ccc8743d0ddf084))
+
 ## [0.9.3-rc.6](https://github.com/michalby24/status/compare/v0.9.2-rc.1...v0.9.3-rc.6) (2026-01-22)
 
 

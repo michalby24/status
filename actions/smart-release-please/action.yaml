@@ -16,18 +16,32 @@ runs:
         fetch-depth: 0
         token: ${{ inputs.token }}
 
+    - name: Skip on release commit
+      id: skip_on_release
+      shell: bash
+      run: |
+        if [[ "${{ github.event.head_commit.message }}" == "chore(main): release"* || "${{ github.event.head_commit.message }}" == "chore(next): release"* || "${{ github.event.head_commit.message }}" == "chore: release"* ]]; then
+          echo "This is a release commit, skipping."
+          echo "skip=true" >> $GITHUB_OUTPUT
+        else
+          echo "This is not a release commit."
+          echo "skip=false" >> $GITHUB_OUTPUT
+        fi
+
     - name: Set up Python
+      if: env.SKIP_RELEASE != 'true'
       uses: actions/setup-python@v6
       with:
         python-version: '3.14'
 
     - name: Calculate Correct RC Version
+      if: env.SKIP_RELEASE != 'true'
       id: calc_rc
       shell: bash
       run: python3 "${{ github.action_path }}/rc_align.py"
 
     - name: Fix Manifest for Main Branch
-      if: github.ref_name == 'main' || github.ref_name == 'master'
+      if: (github.ref_name == 'main' || github.ref_name == 'master') && env.SKIP_RELEASE != 'true'
       shell: bash
       run: |
         # Configure Git
@@ -62,7 +76,8 @@ runs:
           steps.calc_rc.outputs.next_version != '' &&
           !contains(github.event.head_commit.message, 'Release-As:') &&
           ! (startsWith(github.event.head_commit.message, 'chore(') && contains(github.event.head_commit.message, '): release')) &&
-          ! (contains(github.event.head_commit.message, 'Merge branch') && contains(github.event.head_commit.message, 'main'))
+          ! (contains(github.event.head_commit.message, 'Merge branch') && contains(github.event.head_commit.message, 'main')) &&
+          env.SKIP_RELEASE != 'true'
         }}
       shell: bash
       run: |
@@ -122,19 +137,6 @@ runs:
           echo "RELEASE_TYPE=stable" >> $GITHUB_ENV
         else
           echo "RELEASE_TYPE=rc" >> $GITHUB_ENV
-        fi
-
-    - name: Skip on release commit
-      id: skip_on_release
-      shell: bash
-      run: |
-        if [[ "${{ github.event.head_commit.message }}" == "chore(main): release"* || "${{ github.event.head_commit.message }}" == "chore(next): release"* || "${{ github.event.head_commit.message }}" == "chore: release"* ]]; then
-          echo "This is a release commit, skipping."
-          echo "skip=true" >> $GITHUB_OUTPUT
-          echo "SKIP_RELEASE=true" >> $GITHUB_ENV
-        else
-          echo "This is not a release commit."
-          echo "skip=false" >> $GITHUB_OUTPUT
         fi
 
     - name: Run release-please

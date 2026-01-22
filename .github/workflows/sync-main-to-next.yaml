@@ -5,9 +5,6 @@ on:
   # Trigger when a Release is published
   release:
     types: [published]
-  push:
-    branches:
-      - main
 
 jobs:
   reset-next-to-main:
